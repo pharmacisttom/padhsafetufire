@@ -1,5 +1,16 @@
 node_modules/
 .env
-data/
+.env.local
+.env.*.local
+storage/uploads/
+uploads/
+logs/
 *.log
+coverage/
+dist/
+.next/
+temp/
+tmp/
+data/
+*.sqlite
 .v1-audit/

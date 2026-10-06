@@ -1,28 +1,598 @@
-const root=document.querySelector('#app');let me,items=[],page='Dashboard';
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const allowed=p=>me.roles[me.role]?.some(x=>x==='*'||x===p);
-async function api(path,method='GET',body){const r=await fetch('/api/v1/'+path,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json();if(!r.ok){if(r.status===401&&path!=='login')login();throw Error(j.error.message);}return j.data;}
-function toast(text){const t=document.querySelector('#toast');t.textContent=text;t.style.display='block';setTimeout(()=>t.style.display='none',3500);}
-function login(){me=null;root.innerHTML=`<div class="login"><form class="card" id="login"><div class="brand">tomvis<span>.</span></div><p>Build. Connect. Scale.</p><h1>ยินดีต้อนรับกลับ</h1><p>เข้าสู่ระบบพื้นที่ทดลองของคุณ <span class="badge">LOCAL ALPHA</span></p><label for="email">อีเมล</label><input id="email" name="email" type="email" value="admin@tomvis.demo" required autocomplete="username"><label for="password">รหัสผ่าน</label><input id="password" name="password" type="password" required autocomplete="current-password"><button class="primary">เข้าสู่ระบบ →</button><div class="error" role="alert"></div><p>ใช้รหัสผ่านที่กำหนดใน TOMVIS_DEMO_PASSWORD<br>ข้อมูลทั้งหมดในพื้นที่นี้เป็นข้อมูลจำลอง</p></form></div>`;document.querySelector('#login').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api('login','POST',Object.fromEntries(f));await boot();}catch(err){e.target.querySelector('.error').textContent=err.message;}};}
-function table(rows,headers){return `<div class="table-wrap"><table><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${rows.join('')||`<tr><td colspan="${headers.length}">ยังไม่มีข้อมูล</td></tr>`}</tbody></table></div>`;}
-function feedbackTable(data){return table(data.map(x=>`<tr><td><strong>${esc(x.subject)}</strong><br><small class="muted">FB-${String(x.id).padStart(4,'0')}</small></td><td>${esc(x.category)}</td><td><span class="pill ${esc(x.status)}">${esc(x.status.replace('_',' '))}</span></td><td class="${esc(x.priority)}">● ${esc(x.priority)}</td><td>${esc(x.created_at.slice(0,10))}</td><td>${allowed('feedback.manage')?`<button data-resolve="${x.id}" ${x.status==='resolved'?'disabled':''}>Resolve</button>`:'—'}</td></tr>`),['หัวข้อ / Subject','Category','Status','Priority','Created','Action']);}
-function dashboard(){const counts=s=>items.filter(x=>x.status===s).length;return `<div class="stats">${[['◈','Total feedback',items.length,'ข้อมูลใน workspace นี้'],['◷','Awaiting review',counts('open'),'รอการดำเนินการ'],['↗','In progress',counts('in_progress'),'กำลังดำเนินการ'],['✓','Resolved',counts('resolved'),'ดำเนินการเสร็จแล้ว']].map(([i,t,n,s])=>`<div class="card"><span class="stat-icon">${i}</span><div class="stat-label">${t}</div><div class="stat-number">${n}</div><div class="stat-note">${s}</div></div>`).join('')}</div><div class="grid"><div class="card"><div class="card-head"><h2>Feedback by category</h2><span class="muted">Current workspace</span></div><div class="bars">${['Service','Suggestion','Appreciation','Technical'].map(cat=>{const count=items.filter(x=>x.category===cat).length;return `<div class="bar-group"><div class="bar" style="height:${Math.max(4,count/Math.max(1,items.length)*150)}px"></div><small>${cat} (${count})</small></div>`;}).join('')}</div><div class="legend"><span><i class="dot"></i>รายการปัจจุบัน</span></div></div><div class="card"><h2>Resolution overview</h2><p>ติดตามผลการดำเนินงานของทีม</p><div class="distribution"><div class="ring">${Math.round(counts('resolved')/Math.max(1,items.length)*100)}%</div><div class="categories">● Open <strong>${counts('open')}</strong><br>● In progress <strong>${counts('in_progress')}</strong><br>● Resolved <strong>${counts('resolved')}</strong></div></div></div></div><div class="card table-card"><div class="card-head"><h2>Recent feedback</h2><button data-page="Feedback">View all →</button></div>${feedbackTable(items.slice(0,5))}</div>`;}
-async function render(){const nav=[['◫','Dashboard'],['◈','Feedback'],...(allowed('users.view')?[['♙','Users']]:[]),['⊞','Roles & permissions'],...(allowed('audit.view')?[['≡','Audit logs']]:[]),['◇','Sandbox'],['▦','Modules']];root.innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand">tomvis<span>.</span></div><div class="tagline">BUILD. CONNECT. SCALE.</div><div class="section-label">Workspace</div>${nav.map(([i,n])=>`<button class="nav ${n===page?'active':''}" data-page="${n}"><span>${i}</span>${n}</button>`).join('')}<div class="side-bottom"><span class="badge">${esc(me.mode||'SANDBOX')}</span><br>Tomvis Framework V2<br><span class="muted">2.0.0-alpha.1</span><br>Synthetic data only</div></aside><main><header class="topbar"><div><button class="mobile-menu">☰</button><small>Workspace / </small>${esc(page)}</div><div class="profile"><span class="badge">${esc(me.mode||'SANDBOX')}</span><span class="avatar">DA</span><div>${esc(me.name)}<br><small>${esc(me.role)}</small></div><button id="logout">ออกจากระบบ</button></div></header><div class="content"><div class="eyebrow">TOMVIS FEEDBACK</div><div class="heading"><div><h1>${esc(page==='Dashboard'?'Workspace overview':page)}</h1><p>${esc(me.workspace)} · พื้นที่ทดลองสำหรับสร้าง เชื่อมต่อ และเติบโต</p></div>${['Dashboard','Feedback'].includes(page)&&allowed('feedback.manage')?'<button class="primary" id="create">＋ New feedback</button>':''}</div><div id="view"></div><footer><span>© 2026 Tomvis · One Framework. Multiple Solutions.</span><span>Local prototype • Alpha 1</span></footer></div></main></div>`;
-const view=document.querySelector('#view');
-if(page==='Dashboard')view.innerHTML=dashboard();
-if(page==='Feedback'){view.innerHTML='<div class="toolbar"><input id="search" placeholder="ค้นหาหัวข้อ Feedback…" aria-label="ค้นหา Feedback"><select id="filter" aria-label="สถานะ"><option value="">All status</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></div><div class="card" id="results"></div>';const update=()=>{const q=document.querySelector('#search').value.toLowerCase(),s=document.querySelector('#filter').value;document.querySelector('#results').innerHTML=feedbackTable(items.filter(x=>x.subject.toLowerCase().includes(q)&&(!s||x.status===s)));bindResolve();};document.querySelector('#search').oninput=update;document.querySelector('#filter').onchange=update;update();}
-if(page==='Users'){view.innerHTML='<p>กำลังโหลด…</p>';try{const users=await api('users');view.innerHTML=`<div class="card">${table(users.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td>${u.disabled?'Disabled':'Active'}</td></tr>`),['Name','Email','Role','Status'])}</div>`;}catch(e){view.textContent=e.message;}}
-if(page==='Audit logs'){view.innerHTML='<p>กำลังโหลด…</p>';try{const logs=await api('audit');view.innerHTML=`<div class="card">${table(logs.map(l=>`<tr><td>${esc(l.action)}</td><td>${esc(l.actor)}</td><td>${esc(l.resource)}</td><td>${esc(l.timestamp)}</td></tr>`),['Action','Actor','Resource','Timestamp'])}</div>`;}catch(e){view.textContent=e.message;}}
-if(page==='Roles & permissions'){const permissions=['feedback.view','feedback.manage','users.view','audit.view','sandbox.reset'];view.innerHTML=`<div class="card permission">${table(permissions.map(p=>`<tr><td>${p}</td>${Object.keys(me.roles).map(r=>`<td>${me.roles[r].includes('*')||me.roles[r].includes(p)?'✓':'—'}</td>`).join('')}</tr>`),['Permission',...Object.keys(me.roles)])}</div><div class="notice">สิทธิ์ตรวจสอบที่ Backend ทุก request ตารางนี้แสดงสิทธิ์มาตรฐานของต้นแบบ</div>`;}
-if(page==='Sandbox')view.innerHTML=`<div class="grid"><div class="card"><div class="card-head"><h2>Isolated demo workspace</h2><span class="badge">SYNTHETIC DATA</span></div><p>ทดลอง Feedback โดยใช้ข้อมูลจำลองในฐานข้อมูล local แยกจาก V1 การ Reset จะคืนค่า Feedback เริ่มต้นและเก็บบัญชีผู้ใช้กับ Audit ไว้</p><div class="actions">${allowed('sandbox.reset')?'<button id="reset">↻ Reset sandbox</button>':'<span class="muted">บัญชีนี้ไม่มีสิทธิ์ Reset</span>'}</div></div><div class="card"><h2>Alpha scope</h2><p>✓ Tenant-scoped API<br>✓ Server-side authorization<br>✓ Audit & session<br>Private provisioning, expiration, API keys และ webhook จะเพิ่มในเฟสถัดไป</p></div></div>`;
-if(page==='Modules')view.innerHTML=`<div class="module-grid">${[['◈','Feedback','Available','ระบบรับความคิดเห็นและติดตามสถานะ'],['⌖','Workforce','Planned','Attendance, GPS & geofence'],['✚','Smart EMS','Planned','Mission, vehicle & team']].map(([i,n,s,d])=>`<div class="card"><span class="stat-icon">${i}</span><span class="badge">${s}</span><h2>${n}</h2><p>${d}</p>${n==='Feedback'?'<div class="actions"><button data-page="Feedback">Open module →</button></div>':''}</div>`).join('')}</div>`;
-document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;render().catch(e=>toast(e.message));});document.querySelector('.mobile-menu').onclick=()=>document.querySelector('.sidebar').classList.toggle('visible');document.querySelector('#logout').onclick=async()=>{try{await api('logout','POST',{});login();}catch(e){toast(e.message);}};document.querySelector('#create')?.addEventListener('click',createFeedback);document.querySelector('#reset')?.addEventListener('click',resetDialog);bindResolve();
-// CSP permits no inline CSS; chart heights are applied through the stylesheet API.
-document.querySelectorAll('.bar[style]').forEach(b=>{const height=b.getAttribute('style').match(/[\d.]+/)[0];b.removeAttribute('style');b.style.height=height+'px';});
-}
-function bindResolve(){document.querySelectorAll('[data-resolve]').forEach(b=>b.onclick=async()=>{try{await api('feedback/'+b.dataset.resolve,'PATCH',{status:'resolved'});items=await api('feedback');await render();toast('อัปเดตสถานะแล้ว');}catch(e){toast(e.message);}});}
-function dialog(content){const d=document.createElement('dialog');d.innerHTML=content;document.body.append(d);d.addEventListener('close',()=>d.remove());d.querySelector('[data-close]').onclick=()=>d.close();d.showModal();return d;}
-function createFeedback(){const d=dialog('<form><h2>New feedback</h2><label for="subject">หัวข้อ</label><input id="subject" name="subject" maxlength="200" required><label for="category">หมวดหมู่</label><select id="category" name="category"><option>Service</option><option>Suggestion</option><option>Appreciation</option><option>Technical</option></select><label for="priority">ความสำคัญ</label><select id="priority" name="priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select><div class="error" role="alert"></div><div class="actions"><button type="button" data-close>ยกเลิก</button><button class="primary">บันทึก Feedback</button></div></form>');d.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await api('feedback','POST',Object.fromEntries(new FormData(e.target)));d.close();items=await api('feedback');await render();toast('บันทึก Feedback แล้ว');}catch(err){d.querySelector('.error').textContent=err.message;}};}
-function resetDialog(){const d=dialog('<h2>Reset sandbox?</h2><p>ข้อมูล Feedback ทดลองใน workspace นี้จะถูกแทนที่ด้วยข้อมูลเริ่มต้น</p><div class="error" role="alert"></div><div class="actions"><button data-close>ยกเลิก</button><button class="primary" id="confirm-reset">ยืนยัน Reset</button></div>');d.querySelector('#confirm-reset').onclick=async()=>{try{await api('sandbox/reset','POST',{confirm:'RESET'});d.close();items=await api('feedback');await render();toast('Reset sandbox สำเร็จ');}catch(e){d.querySelector('.error').textContent=e.message;}};}
-async function boot(){try{me=await api('me');items=await api('feedback');await render();}catch{login();}}
-boot();
+// PdhSafetyFire Web Application SPA Controller
+(function() {
+  'use strict';
+
+  let currentUser = null;
+  let mapInstance = null;
+  let markersLayer = null;
+  let activeChecklistTemplate = null;
+  let activePointForInspection = null;
+  let activeAssetForInspection = null;
+  let capturedGps = null;
+  let inspectionAnswers = {};
+
+  const API_BASE = '/api/pdhsafetyfire';
+
+  // Helper API call
+  async function apiCall(endpoint, method = 'GET', body = null) {
+    const opts = {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(endpoint, opts);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error?.message || 'API request failed');
+    return json.data;
+  }
+
+  // Initialize App
+  document.addEventListener('DOMContentLoaded', async () => {
+    bindEvents();
+    await checkAuthSession();
+  });
+
+  async function checkAuthSession() {
+    try {
+      const res = await fetch('/api/v1/me');
+      if (res.ok) {
+        const json = await res.json();
+        currentUser = json.data;
+        document.getElementById('txtUserName').innerText = `${currentUser.name} (${currentUser.role})`;
+        document.getElementById('modalLogin').classList.remove('active');
+        loadDashboard();
+      } else {
+        document.getElementById('modalLogin').classList.add('active');
+      }
+    } catch {
+      document.getElementById('modalLogin').classList.add('active');
+    }
+  }
+
+  function bindEvents() {
+    // Navigation Tabs
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+        e.target.classList.add('active');
+        const tabId = e.target.dataset.tab;
+        document.getElementById(`tab-${tabId}`).classList.add('active');
+
+        if (tabId === 'dashboard') loadDashboard();
+        if (tabId === 'map') initSafetyMap();
+        if (tabId === 'points') loadPoints();
+        if (tabId === 'assets') loadAssets();
+        if (tabId === 'inspections') loadInspections();
+        if (tabId === 'defects') loadDefects();
+        if (tabId === 'reports') loadAuditTrail();
+      });
+    });
+
+    // Login Form
+    document.getElementById('formLogin').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const data = await apiCall('/api/v1/login', 'POST', { email, password });
+        currentUser = data;
+        document.getElementById('modalLogin').classList.remove('active');
+        document.getElementById('txtUserName').innerText = `${data.name} (${data.role || 'super_admin'})`;
+        loadDashboard();
+      } catch (err) {
+        alert('Login failed: ' + err.message);
+      }
+    });
+
+    // Logout
+    document.getElementById('btnLogout').addEventListener('click', async () => {
+      await fetch('/api/v1/logout', { method: 'POST' });
+      location.reload();
+    });
+
+    // 2FA Setup Button
+    document.getElementById('btn2faSetup').addEventListener('click', async () => {
+      try {
+        const data = await apiCall(`${API_BASE}/auth/2fa/setup`, 'POST');
+        document.getElementById('qr2faContainer').innerHTML = data.qr_svg;
+        document.getElementById('modal2fa').classList.add('active');
+        document.getElementById('area2faSetup').classList.remove('hidden');
+        document.getElementById('area2faSuccess').classList.add('hidden');
+      } catch (err) {
+        alert('2FA Setup failed: ' + err.message);
+      }
+    });
+
+    document.getElementById('btnVerify2fa').addEventListener('click', async () => {
+      const otp = document.getElementById('input2faOtp').value;
+      try {
+        const data = await apiCall(`${API_BASE}/auth/2fa/enroll`, 'POST', { otp_code: otp });
+        document.getElementById('area2faSetup').classList.add('hidden');
+        document.getElementById('area2faSuccess').classList.remove('hidden');
+        document.getElementById('recoveryCodesList').innerHTML = data.recovery_codes.map(c => `<code>${c}</code>`).join(' ');
+      } catch (err) {
+        alert('2FA Verification failed: ' + err.message);
+      }
+    });
+
+    // Close Modals
+    document.querySelectorAll('.btn-close').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+      });
+    });
+
+    // Quick Actions
+    document.getElementById('btnQuickScan').addEventListener('click', () => {
+      const token = prompt('กรอกรหัสจุดหรือสแกน QR Code (เช่น pdh_point_token_er_001_sec_rand_hash):');
+      if (token) openInspectionForPoint(token);
+    });
+
+    document.getElementById('btnQuickReport').addEventListener('click', () => {
+      document.getElementById('modalPublicReport').classList.add('active');
+    });
+
+    document.getElementById('formPublicReport').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const issueType = document.getElementById('reportIssueType').value;
+        const description = document.getElementById('reportDescription').value;
+        const reporterName = document.getElementById('reportName').value || 'Anonymous Public';
+
+        let photoUrl = null;
+        const photoInput = document.getElementById('reportPhotoInput');
+        if (photoInput.files && photoInput.files[0]) {
+          photoUrl = await uploadFileBase64(photoInput.files[0]);
+        }
+
+        await apiCall(`${API_BASE}/q/pdh_point_token_er_001_sec_rand_hash/report`, 'POST', {
+          issue_type: issueType,
+          description: description,
+          reporter_name: reporterName,
+          photo_url: photoUrl
+        });
+
+        alert('ส่งรายงานเรียบร้อยแล้ว ขอบคุณสำหรับข้อมูล');
+        document.getElementById('modalPublicReport').classList.remove('active');
+        loadDashboard();
+      } catch (err) {
+        alert('ส่งรายงานล้มเหลว: ' + err.message);
+      }
+    });
+
+    // Inspection Buttons
+    document.getElementById('btnStartInspection').addEventListener('click', () => {
+      openInspectionForPoint('pdh_point_token_er_001_sec_rand_hash');
+    });
+
+    document.getElementById('btnCaptureGps').addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        alert('Browser ของท่านไม่รองรับ Geolocation');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          capturedGps = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          };
+
+          const statusBox = document.getElementById('gpsStatusBox');
+          statusBox.innerHTML = `✅ รับพิกัดสำเร็จ! Lat: ${capturedGps.lat.toFixed(6)}, Lon: ${capturedGps.lon.toFixed(6)} (ความแม่นยำ: ${Math.round(capturedGps.accuracy)}ม.)`;
+          statusBox.className = 'gps-status-box success';
+          document.getElementById('btnGoToChecklist').disabled = false;
+        },
+        (err) => {
+          alert('ไม่สามารถดึงพิกัด GPS ได้: ' + err.message);
+        },
+        { enableHighAccuracy: true }
+      );
+    });
+
+    document.getElementById('btnGoToChecklist').addEventListener('click', () => {
+      document.getElementById('inspectStep1').classList.add('hidden');
+      document.getElementById('inspectStep2').classList.remove('hidden');
+      loadChecklistQuestions();
+    });
+
+    document.getElementById('btnSubmitInspection').addEventListener('click', async () => {
+      try {
+        const answersList = Object.values(inspectionAnswers);
+        if (answersList.length === 0) {
+          alert('กรุณาตอบคำถามอย่างน้อย 1 ข้อ');
+          return;
+        }
+
+        const notes = document.getElementById('inspectNotes').value;
+        const overrideReason = document.getElementById('inspectGpsOverrideReason').value;
+
+        const payload = {
+          safety_point_id: activePointForInspection.id,
+          safety_asset_id: activeAssetForInspection.id,
+          template_version_id: activeChecklistTemplate.active_version_id,
+          checkin_latitude: capturedGps ? capturedGps.lat : null,
+          checkin_longitude: capturedGps ? capturedGps.lon : null,
+          checkin_accuracy_m: capturedGps ? capturedGps.accuracy : null,
+          location_override_reason: overrideReason,
+          answers: answersList,
+          notes
+        };
+
+        const result = await apiCall(`${API_BASE}/inspections`, 'POST', payload);
+        alert(`บันทึกการตรวจเช็คสำเร็จ! ผลลัพธ์: ${result.overallStatus}`);
+        document.getElementById('modalInspect').classList.remove('active');
+        loadDashboard();
+      } catch (err) {
+        alert('บันทึกผลการตรวจเช็คล้มเหลว: ' + err.message);
+      }
+    });
+
+    // Export CSV Button
+    document.getElementById('btnExportCsv').addEventListener('click', () => {
+      window.open(`${API_BASE}/reports/export?format=csv&type=assets`, '_blank');
+    });
+  }
+
+  // Dashboard Loader
+  async function loadDashboard() {
+    try {
+      const data = await apiCall(`${API_BASE}/dashboard`);
+      document.getElementById('kpiTotalPoints').innerText = data.totalPoints;
+      document.getElementById('kpiTotalAssets').innerText = data.totalAssets;
+      document.getElementById('kpiNormalAssetsText').innerText = `${data.normalAssets} พร้อมใช้งาน`;
+      document.getElementById('kpiDueAssets').innerText = data.dueSoonAssets;
+      document.getElementById('kpiDefectiveAssets').innerText = data.defectiveAssets;
+      document.getElementById('kpiCriticalDefectsText').innerText = `${data.criticalDefects} ความเสี่ยงวิกฤต`;
+      document.getElementById('kpiCompliance').innerText = `${data.complianceRate}%`;
+
+      // Load Recent Activity
+      const inspections = await apiCall(`${API_BASE}/inspections`);
+      const recentList = document.getElementById('recentInspectionsList');
+      if (inspections.length === 0) {
+        recentList.innerHTML = '<div class="activity-item">ยังไม่มีประวัติการตรวจเช็ค</div>';
+      } else {
+        recentList.innerHTML = inspections.slice(0, 5).map(i => `
+          <div class="activity-item">
+            <div>
+              <strong>${i.point_code}</strong> - ${i.asset_name}<br>
+              <small style="color:#64748B;">โดย: ${i.inspector_name || 'Inspector'} (${i.inspected_at})</small>
+            </div>
+            <span class="badge ${i.overall_result === 'PASS' ? 'success' : 'danger'}">${i.overall_result}</span>
+          </div>
+        `).join('');
+      }
+
+      // Load Open Defects
+      const defects = await apiCall(`${API_BASE}/defects`);
+      const openList = document.getElementById('openDefectsList');
+      if (defects.length === 0) {
+        openList.innerHTML = '<div class="activity-item">ไม่มีข้อบกพร่องที่ค้างชำระ</div>';
+      } else {
+        openList.innerHTML = defects.slice(0, 5).map(d => `
+          <div class="activity-item">
+            <div>
+              <strong>[${d.risk_level}] ${d.issue_type}</strong> - ${d.point_code}<br>
+              <small style="color:#64748B;">${d.description}</small>
+            </div>
+            <span class="badge ${d.status === 'REPORTED' ? 'warning' : 'info'}">${d.status}</span>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard:', err);
+    }
+  }
+
+  // Safety Map Initialization
+  async function initSafetyMap() {
+    if (!mapInstance) {
+      mapInstance = L.map('safetyMap').setView([12.9644, 101.2135], 17);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors | PdhSafetyFire'
+      }).addTo(mapInstance);
+      markersLayer = L.layerGroup().addTo(mapInstance);
+    }
+
+    try {
+      markersLayer.clearLayers();
+      const geoJson = await apiCall(`${API_BASE}/map`);
+
+      geoJson.features.forEach(f => {
+        const [lon, lat] = f.geometry.coordinates;
+        const color = f.properties.markerColor;
+        let colorHex = '#10B981';
+        if (color === 'YELLOW') colorHex = '#F59E0B';
+        if (color === 'ORANGE') colorHex = '#F97316';
+        if (color === 'RED') colorHex = '#EF4444';
+
+        const marker = L.circleMarker([lat, lon], {
+          radius: 10,
+          fillColor: colorHex,
+          color: '#FFFFFF',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.9
+        });
+
+        marker.bindPopup(`
+          <div style="font-family:'Prompt',sans-serif; min-width: 180px;">
+            <strong style="color:#0F172A;">${f.properties.point_code}</strong><br>
+            <span style="font-size:12px; color:#475569;">${f.properties.point_name}</span><br>
+            <small style="color:#64748B;">${f.properties.location}</small><hr style="margin: 6px 0;">
+            <button onclick="window.openInspection('${f.properties.id}')" style="background:#0284C7; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer; width:100%;">ตรวจเช็คจุดนี้ 📱</button>
+          </div>
+        `);
+
+        markersLayer.addLayer(marker);
+      });
+    } catch (err) {
+      console.error('Map loading failed:', err);
+    }
+  }
+
+  // Inspection Workflow Trigger
+  async function openInspectionForPoint(pointToken) {
+    try {
+      const publicData = await apiCall(`${API_BASE}/q/${pointToken}`);
+      const templates = await apiCall(`${API_BASE}/templates`);
+
+      activePointForInspection = publicData.point;
+      activeAssetForInspection = publicData.assets[0] || { id: 'ast-fe-001', asset_name: 'ถังดับเพลิง' };
+      activeChecklistTemplate = templates[0];
+      inspectionAnswers = {};
+
+      document.getElementById('inspectPointSummary').innerHTML = `
+        <strong>รหัสจุด:</strong> ${activePointForInspection.point_code}<br>
+        <strong>สถานที่:</strong> ${activePointForInspection.location}<br>
+        <strong>อุปกรณ์:</strong> ${activeAssetForInspection.asset_name || 'ถังดับเพลิง'}
+      `;
+
+      document.getElementById('inspectStep1').classList.remove('hidden');
+      document.getElementById('inspectStep2').classList.add('hidden');
+      document.getElementById('btnGoToChecklist').disabled = true;
+      document.getElementById('gpsStatusBox').innerHTML = 'ยังไม่ได้ตรวจสอบพิกัด';
+      document.getElementById('gpsStatusBox').className = 'gps-status-box';
+
+      document.getElementById('modalInspect').classList.add('active');
+    } catch (err) {
+      alert('ไม่สามารถดึงข้อมูลจุดติดตั้งได้: ' + err.message);
+    }
+  }
+
+  window.openInspection = function(pointId) {
+    openInspectionForPoint('pdh_point_token_er_001_sec_rand_hash');
+  };
+
+  function loadChecklistQuestions() {
+    const container = document.getElementById('checklistItemsContainer');
+    const items = activeChecklistTemplate.items;
+
+    container.innerHTML = items.map((item, idx) => `
+      <div class="checklist-card ${item.is_critical ? 'critical' : ''}" id="card-item-${item.id}">
+        <div class="checklist-q">
+          ${idx + 1}. ${item.question_th}
+          ${item.is_critical ? '<span class="badge danger">Critical</span>' : ''}
+        </div>
+        <div class="checklist-btns">
+          <button class="btn-touch pass" onclick="window.selectAnswer('${item.id}', 'PASS')">PASS ✅</button>
+          <button class="btn-touch fail" onclick="window.selectAnswer('${item.id}', 'FAIL')">FAIL ❌</button>
+          <button class="btn-touch na" onclick="window.selectAnswer('${item.id}', 'NA')">N/A ➖</button>
+        </div>
+        <div class="checklist-fail-extra" id="extra-${item.id}">
+          <div class="form-group" style="margin-top:8px;">
+            <input type="text" id="note-${item.id}" placeholder="ระบุสาเหตุข้อบกพร่อง *" onchange="window.updateAnswerNote('${item.id}', this.value)">
+          </div>
+          <div class="form-group">
+            <input type="file" accept="image/*" onchange="window.handleAnswerPhoto('${item.id}', this)">
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    updateProgressBar();
+  }
+
+  window.selectAnswer = function(itemId, result) {
+    const card = document.getElementById(`card-item-${itemId}`);
+    card.querySelectorAll('.btn-touch').forEach(b => b.classList.remove('selected'));
+    const clickedBtn = card.querySelector(`.btn-touch.${result.toLowerCase()}`);
+    if (clickedBtn) clickedBtn.classList.add('selected');
+
+    const extraBox = document.getElementById(`extra-${itemId}`);
+    if (result === 'FAIL') {
+      extraBox.classList.add('active');
+    } else {
+      extraBox.classList.remove('active');
+    }
+
+    if (!inspectionAnswers[itemId]) {
+      inspectionAnswers[itemId] = { item_id: itemId, result, note: '', photo_url: null };
+    } else {
+      inspectionAnswers[itemId].result = result;
+    }
+
+    updateProgressBar();
+  };
+
+  window.updateAnswerNote = function(itemId, val) {
+    if (inspectionAnswers[itemId]) {
+      inspectionAnswers[itemId].note = val;
+    }
+  };
+
+  window.handleAnswerPhoto = async function(itemId, input) {
+    if (input.files && input.files[0]) {
+      try {
+        const photoUrl = await uploadFileBase64(input.files[0]);
+        if (inspectionAnswers[itemId]) {
+          inspectionAnswers[itemId].photo_url = photoUrl;
+        }
+      } catch (err) {
+        alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + err.message);
+      }
+    }
+  };
+
+  function updateProgressBar() {
+    const total = activeChecklistTemplate.items.length;
+    const answered = Object.keys(inspectionAnswers).length;
+    const pct = Math.round((answered / total) * 100);
+
+    document.getElementById('txtProgress').innerText = `${answered}/${total}`;
+    document.getElementById('txtProgressPercent').innerText = `${pct}%`;
+    document.getElementById('progressFill').style.width = `${pct}%`;
+  }
+
+  // Load Points Table
+  async function loadPoints() {
+    try {
+      const points = await apiCall(`${API_BASE}/points`);
+      const tbody = document.querySelector('#tablePoints tbody');
+      tbody.innerHTML = points.map(p => `
+        <tr>
+          <td><strong>${p.point_code}</strong></td>
+          <td>${p.point_name}</td>
+          <td>${p.building_name || ''} ${p.floor_name || ''} (${p.zone_name || ''})</td>
+          <td>${p.latitude}, ${p.longitude}</td>
+          <td><code>${p.qr_token.slice(0, 10)}...</code></td>
+          <td><span class="badge success">${p.status}</span></td>
+          <td>
+            <button class="btn-subtle" onclick="window.openSticker('${p.id}')">🖨️ พิมพ์ สติกเกอร์ QR</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error('Failed to load points:', err);
+    }
+  }
+
+  window.openSticker = function(pointId) {
+    window.open(`${API_BASE}/points/${pointId}/sticker`, '_blank', 'width=400,height=500');
+  };
+
+  // Load Assets Table
+  async function loadAssets() {
+    try {
+      const assets = await apiCall(`${API_BASE}/assets`);
+      const tbody = document.querySelector('#tableAssets tbody');
+      tbody.innerHTML = assets.map(a => `
+        <tr>
+          <td><strong>${a.asset_code}</strong></td>
+          <td>${a.asset_name}</td>
+          <td>${a.point_code} (${a.building_name})</td>
+          <td>${a.subtype || 'ABC'}</td>
+          <td>${a.capacity ? a.capacity + ' ' + a.capacity_unit : '15 Kg'}</td>
+          <td><span class="badge ${a.status === 'NORMAL' ? 'success' : 'warning'}">${a.status}</span></td>
+          <td>${a.last_inspection_date || 'ยังไม่เคยตรวจ'}</td>
+          <td><button class="btn-subtle">รายละเอียด</button></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error('Failed to load assets:', err);
+    }
+  }
+
+  // Load Inspections History Table
+  async function loadInspections() {
+    try {
+      const inspections = await apiCall(`${API_BASE}/inspections`);
+      const tbody = document.querySelector('#tableInspections tbody');
+      tbody.innerHTML = inspections.map(i => `
+        <tr>
+          <td>${i.inspected_at}</td>
+          <td><strong>${i.point_code}</strong></td>
+          <td>${i.asset_code}</td>
+          <td>${i.inspector_name || 'Inspector'}</td>
+          <td><span class="badge info">${i.location_status}</span></td>
+          <td><span class="badge ${i.overall_result === 'PASS' ? 'success' : 'danger'}">${i.overall_result}</span></td>
+          <td><button class="btn-subtle">ดู Checklist</button></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error('Failed to load inspections:', err);
+    }
+  }
+
+  // Load Defects Table
+  async function loadDefects() {
+    try {
+      const defects = await apiCall(`${API_BASE}/defects`);
+      const tbody = document.querySelector('#tableDefects tbody');
+      tbody.innerHTML = defects.map(d => `
+        <tr>
+          <td>${d.created_at}</td>
+          <td><strong>${d.point_code}</strong></td>
+          <td>${d.issue_type}</td>
+          <td><span class="badge ${d.risk_level === 'CRITICAL' ? 'danger' : 'warning'}">${d.risk_level}</span></td>
+          <td><span class="badge info">${d.status}</span></td>
+          <td><span class="badge info">${d.capa_status || 'OPEN'}</span></td>
+          <td>${d.capa_due_date || '-'}</td>
+          <td><button class="btn-subtle" onclick="window.updateDefectState('${d.id}')">จัดการ CAPA</button></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error('Failed to load defects:', err);
+    }
+  }
+
+  window.updateDefectState = async function(defectId) {
+    const newStatus = prompt('เปลี่ยนสถานะ Defect (ACKNOWLEDGED / ASSIGNED / CORRECTED / VERIFIED / CLOSED):', 'ACKNOWLEDGED');
+    if (newStatus) {
+      try {
+        await apiCall(`${API_BASE}/defects/${defectId}/status`, 'PATCH', { status: newStatus });
+        alert('อัปเดตสถานะเรียบร้อยแล้ว');
+        loadDefects();
+      } catch (err) {
+        alert('อัปเดตสถานะล้มเหลว: ' + err.message);
+      }
+    }
+  };
+
+  // Load Audit Trail Table
+  async function loadAuditTrail() {
+    try {
+      const logs = await apiCall(`${API_BASE}/audit`);
+      const tbody = document.querySelector('#tableAudit tbody');
+      tbody.innerHTML = logs.map(l => `
+        <tr>
+          <td>${l.created_at}</td>
+          <td>${l.actor_name || 'System'}</td>
+          <td><code>${l.action}</code></td>
+          <td>${l.entity_type}</td>
+          <td>${l.ip_address}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error('Failed to load audit trail:', err);
+    }
+  }
+
+  // Helper file base64 uploader
+  function uploadFileBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Str = reader.result.split(',')[1];
+        try {
+          const res = await apiCall(`${API_BASE}/upload`, 'POST', {
+            file_base64: base64Str,
+            filename: file.name,
+            mime_type: file.type
+          });
+          resolve(res.filePath);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+})();

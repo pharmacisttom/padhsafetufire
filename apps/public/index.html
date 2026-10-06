@@ -1,1 +1,349 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tomvis • Workspace</title><link rel="stylesheet" href="/style.css"></head><body><div id="app"></div><div id="toast" role="status"></div><script type="module" src="/app.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PdhSafetyFire — ระบบตรวจสอบและบริหารความปลอดภัยด้านอัคคีภัย โรงพยาบาลปลวกแดง</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app" class="app-layout">
+    <!-- Header Navigation -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">🔥</div>
+        <div>
+          <h1 class="brand-title">PdhSafetyFire</h1>
+          <p class="brand-subtitle">ระบบตรวจสอบและบริหารความปลอดภัยด้านอัคคีภัย โรงพยาบาลปลวกแดง</p>
+        </div>
+      </div>
+      <div class="header-user" id="headerUserArea">
+        <button id="btn2faSetup" class="btn-subtle" title="2FA Google Authenticator">🔑 2FA</button>
+        <span id="txtUserName" class="user-badge">Super Admin</span>
+        <button id="btnLogout" class="btn-subtle" title="ออกจากระบบ">🚪 ออกจากระบบ</button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="app-nav">
+      <button class="nav-btn active" data-tab="dashboard">📊 ภาพรวม</button>
+      <button class="nav-btn" data-tab="map">🗺️ แผนที่จุดติดตั้ง</button>
+      <button class="nav-btn" data-tab="points">📍 จุดติดตั้ง (Points)</button>
+      <button class="nav-btn" data-tab="assets">🧯 ทะเบียนถังดับเพลิง</button>
+      <button class="nav-btn" data-tab="inspections">📋 การตรวจเช็ค</button>
+      <button class="nav-btn" data-tab="defects">⚠️ ปัญหา & CAPA</button>
+      <button class="nav-btn" data-tab="reports">📄 รายงาน & Audit</button>
+    </nav>
+
+    <!-- Mobile Quick Actions -->
+    <div class="quick-actions-bar">
+      <button id="btnQuickScan" class="btn-action primary">📱 สแกน QR ตรวจเช็ค</button>
+      <button id="btnQuickReport" class="btn-action warning">⚠️ แจ้งอุปกรณ์ผิดปกติ</button>
+    </div>
+
+    <!-- Main Content Container -->
+    <main class="app-content">
+      <!-- 1. DASHBOARD TAB -->
+      <section id="tab-dashboard" class="tab-panel active">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-title">จุดติดตั้งทั้งหมด</div>
+            <div class="kpi-val" id="kpiTotalPoints">0</div>
+            <div class="kpi-sub">Safety Points</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">ถังดับเพลิงทั้งหมด</div>
+            <div class="kpi-val" id="kpiTotalAssets">0</div>
+            <div class="kpi-sub" id="kpiNormalAssetsText">0 พร้อมใช้งาน</div>
+          </div>
+          <div class="kpi-card status-warn">
+            <div class="kpi-title">ต้องตรวจ / ใกล้ถึงกำหนด</div>
+            <div class="kpi-val" id="kpiDueAssets">0</div>
+            <div class="kpi-sub">Inspection Due Soon</div>
+          </div>
+          <div class="kpi-card status-danger">
+            <div class="kpi-title">พบปัญหา / ชำรุด</div>
+            <div class="kpi-val" id="kpiDefectiveAssets">0</div>
+            <div class="kpi-sub" id="kpiCriticalDefectsText">0 ความเสี่ยงวิกฤต</div>
+          </div>
+          <div class="kpi-card status-success">
+            <div class="kpi-title">อัตราความสมบูรณ์</div>
+            <div class="kpi-val" id="kpiCompliance">100%</div>
+            <div class="kpi-sub">Inspection Compliance</div>
+          </div>
+        </div>
+
+        <div class="dashboard-widgets">
+          <div class="widget-box">
+            <h3>📋 การตรวจเช็กล่าสุด</h3>
+            <div id="recentInspectionsList" class="activity-list">กำลังโหลดข้อมูล...</div>
+          </div>
+          <div class="widget-box">
+            <h3>🚨 ปัญหาที่รอการแก้ไข (Open Defects & CAPA)</h3>
+            <div id="openDefectsList" class="activity-list">กำลังโหลดข้อมูล...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. SAFETY MAP TAB -->
+      <section id="tab-map" class="tab-panel">
+        <div class="map-controls">
+          <label>กรองอาคาร: 
+            <select id="mapFilterBuilding"><option value="ALL">ทั้งหมดทุกอาคาร</option></select>
+          </label>
+          <div class="map-legend">
+            <span class="legend-item"><span class="dot green"></span> ปกติ</span>
+            <span class="legend-item"><span class="dot yellow"></span> ใกล้ถึงกำหนดตรวจ</span>
+            <span class="legend-item"><span class="dot orange"></span> พบปัญหา</span>
+            <span class="legend-item"><span class="dot red"></span> วิกฤต (Critical)</span>
+          </div>
+        </div>
+        <div id="safetyMap" class="map-container"></div>
+      </section>
+
+      <!-- 3. SAFETY POINTS TAB -->
+      <section id="tab-points" class="tab-panel">
+        <div class="panel-header">
+          <h2>📍 จุดติดตั้งอุปกรณ์ความปลอดภัย (Safety Points)</h2>
+          <button id="btnAddPoint" class="btn-primary">+ เพิ่มจุดติดตั้งใหม่</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="tablePoints">
+            <thead>
+              <tr>
+                <th>รหัสจุด</th>
+                <th>ชื่อจุดติดตั้ง</th>
+                <th>อาคาร / ชั้น / โซน</th>
+                <th>พิกัด GPS</th>
+                <th>QR Token</th>
+                <th>สถานะ</th>
+                <th>การจัดการ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 4. SAFETY ASSETS TAB -->
+      <section id="tab-assets" class="tab-panel">
+        <div class="panel-header">
+          <h2>🧯 ทะเบียนถังดับเพลิงและอุปกรณ์ความปลอดภัย</h2>
+          <button id="btnAddAsset" class="btn-primary">+ ลงทะเบียนถังดับเพลิงใหม่</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="tableAssets">
+            <thead>
+              <tr>
+                <th>รหัสถัง/อุปกรณ์</th>
+                <th>ชื่ออุปกรณ์</th>
+                <th>จุดติดตั้ง</th>
+                <th>ชนิดสารฉีด</th>
+                <th>ขนาด</th>
+                <th>สถานะ</th>
+                <th>ตรวจล่าสุด</th>
+                <th>การจัดการ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5. INSPECTIONS TAB -->
+      <section id="tab-inspections" class="tab-panel">
+        <div class="panel-header">
+          <h2>📋 ประวัติและรายการตรวจเช็ค</h2>
+          <button id="btnStartInspection" class="btn-primary">📱 เริ่มตรวจเช็คจุดนี้</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="tableInspections">
+            <thead>
+              <tr>
+                <th>วันที่ตรวจ</th>
+                <th>รหัสจุด</th>
+                <th>ถังดับเพลิง</th>
+                <th>ผู้ตรวจ</th>
+                <th>สถานะ GPS</th>
+                <th>ผลการตรวจ</th>
+                <th>รายละเอียด</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6. DEFECTS & CAPA TAB -->
+      <section id="tab-defects" class="tab-panel">
+        <div class="panel-header">
+          <h2>⚠️ ทะเบียนข้อบกพร่องและการแก้ไข (Defects & CAPA)</h2>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="tableDefects">
+            <thead>
+              <tr>
+                <th>วันที่แจ้ง</th>
+                <th>รหัสจุด</th>
+                <th>ประเภทปัญหา</th>
+                <th>ความเสี่ยง</th>
+                <th>สถานะ Defect</th>
+                <th>สถานะ CAPA</th>
+                <th>กำหนดเสร็จ</th>
+                <th>การจัดการ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 7. REPORTS & AUDIT TAB -->
+      <section id="tab-reports" class="tab-panel">
+        <div class="panel-header">
+          <h2>📄 รายงานและการตรวจสอบย้อนหลัง (Audit Trail)</h2>
+          <button id="btnExportCsv" class="btn-secondary">📥 Export CSV รายงาน</button>
+        </div>
+        <h3>📜 Immutable Audit Trail Logs</h3>
+        <div class="table-responsive">
+          <table class="data-table" id="tableAudit">
+            <thead>
+              <tr>
+                <th>เวลา (Timestamp)</th>
+                <th>ผู้ทำรายการ</th>
+                <th>Action</th>
+                <th>Resource</th>
+                <th>IP Address</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal Containers -->
+    <!-- 1. LOGIN MODAL -->
+    <div id="modalLogin" class="modal active">
+      <div class="modal-content auth-card">
+        <h2>🔥 เข้าสู่ระบบ PdhSafetyFire</h2>
+        <p class="subtitle">โรงพยาบาลปลวกแดง</p>
+        <form id="formLogin">
+          <div class="form-group">
+            <label>อีเมลผู้ใช้งาน (Email)</label>
+            <input type="email" id="loginEmail" required value="pharmacisttom@gmail.com">
+          </div>
+          <div class="form-group">
+            <label>รหัสผ่าน (Password)</label>
+            <input type="password" id="loginPassword" required placeholder="กรอกรหัสผ่าน">
+          </div>
+          <button type="submit" class="btn-block primary">เข้าสู่ระบบ</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 2. INSPECTION WORKFLOW MODAL -->
+    <div id="modalInspect" class="modal">
+      <div class="modal-content inspect-card">
+        <div class="modal-header">
+          <h2>📱 ตรวจสอบถังดับเพลิงประจำเดือน</h2>
+          <button class="btn-close">&times;</button>
+        </div>
+        <div class="inspect-step" id="inspectStep1">
+          <h3>ขั้นตอนที่ 1: ตรวจสอบพิกัด GPS Check-in</h3>
+          <div class="point-summary" id="inspectPointSummary">กำลังโหลดข้อมูลจุด...</div>
+          <button id="btnCaptureGps" class="btn-action primary">📍 ตรวจสอบพิกัด GPS ปัจจุบัน</button>
+          <div id="gpsStatusBox" class="gps-status-box">ยังไม่ได้ตรวจสอบพิกัด</div>
+          <div id="gpsOverrideGroup" class="form-group hidden">
+            <label class="text-danger">⚠️ อยู่นอกระยะ Geofence! ระบุเหตุผลในการ Override:</label>
+            <input type="text" id="inspectGpsOverrideReason" placeholder="เช่น สัญญาณ GPS ภายในอาคารอับ">
+          </div>
+          <button id="btnGoToChecklist" class="btn-block primary" disabled>เริ่มทำรายการ Checklist ➡️</button>
+        </div>
+
+        <div class="inspect-step hidden" id="inspectStep2">
+          <div class="progress-bar-container">
+            <div class="progress-info">
+              <span>ความคืบหน้า: <strong id="txtProgress">0/13</strong></span>
+              <span id="txtProgressPercent">0%</span>
+            </div>
+            <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+          </div>
+          <div id="checklistItemsContainer" class="checklist-container"></div>
+          <div class="form-group">
+            <label>หมายเหตุเพิ่มเติมการตรวจเช็ค:</label>
+            <textarea id="inspectNotes" rows="2" placeholder="ระบุข้อสังเกตเพิ่มเติม (ถ้ามี)"></textarea>
+          </div>
+          <button id="btnSubmitInspection" class="btn-block success">✅ ยืนยันบันทึกผลการตรวจเช็ค</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. PUBLIC DEFECT REPORT MODAL -->
+    <div id="modalPublicReport" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>⚠️ แจ้งอุปกรณ์ดับเพลิงผิดปกติ</h2>
+          <button class="btn-close">&times;</button>
+        </div>
+        <form id="formPublicReport">
+          <div class="form-group">
+            <label>ประเภทปัญหาที่พบ *</label>
+            <select id="reportIssueType" required>
+              <option value="MISSING">ถังดับเพลิงไม่อยู่/สูญหาย (MISSING)</option>
+              <option value="LOW_PRESSURE">แรงดันตก/เข็มตก (LOW_PRESSURE)</option>
+              <option value="PIN_MISSING">สลักนิรภัยหลุด/ซีลขาด (PIN_MISSING)</option>
+              <option value="DAMAGED">สภาพถังชำรุด/บุบ/เป็นสนิม (DAMAGED)</option>
+              <option value="OBSTRUCTED">มีสิ่งกีดขวางการใช้งาน (OBSTRUCTED)</option>
+              <option value="EXPIRED">หมดอายุการใช้งาน (EXPIRED)</option>
+              <option value="OTHER">ปัญหาอื่น ๆ (OTHER)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>รายละเอียดปัญหา *</label>
+            <textarea id="reportDescription" rows="3" required placeholder="อธิบายปัญหาที่พบเพิ่มเติม..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>รูปถ่ายหลักฐาน (ถ้ามี)</label>
+            <input type="file" id="reportPhotoInput" accept="image/*">
+          </div>
+          <div class="form-group">
+            <label>ชื่อผู้แจ้ง (Optional)</label>
+            <input type="text" id="reportName" placeholder="ไม่ระบุชื่อก็ได้ (Anonymous)">
+          </div>
+          <button type="submit" class="btn-block danger">ส่งรายงานแจ้งปัญหา</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 4. 2FA SETUP MODAL -->
+    <div id="modal2fa" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>🔑 ตั้งค่า Google Authenticator 2FA</h2>
+          <button class="btn-close">&times;</button>
+        </div>
+        <div id="area2faSetup">
+          <p>1. สแกน QR Code ด้วยแอป <strong>Google Authenticator</strong> บนมือถือ:</p>
+          <div id="qr2faContainer" class="qr-container"></div>
+          <p>2. กรอกรหัส OTP 6 หลักที่ได้จากแอป:</p>
+          <input type="text" id="input2faOtp" maxlength="6" placeholder="123456" style="font-size: 20px; text-align: center; letter-spacing: 4px;">
+          <button id="btnVerify2fa" class="btn-block primary" style="margin-top: 12px;">ยืนยันเปิดใช้งาน 2FA</button>
+        </div>
+        <div id="area2faSuccess" class="hidden">
+          <h3 class="text-success">✅ เปิดใช้งาน 2FA สำเร็จ!</h3>
+          <p>โปรดบันทึก <strong>Recovery Codes</strong> เหล่านี้ไว้ในที่ปลอดภัย (แสดงครั้งนี้ครั้งเดียว):</p>
+          <div id="recoveryCodesList" class="recovery-box"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
